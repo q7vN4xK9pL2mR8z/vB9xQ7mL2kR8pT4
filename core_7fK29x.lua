@@ -1,3 +1,4 @@
+setDefaultTab("Main")
 BossFarm = BossFarm or {}
 
 if bossFarmWindow then
