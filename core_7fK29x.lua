@@ -1,5 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
+BossFarm.VERSAO = "1.0"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -204,12 +205,12 @@ macro(1000, function()
             g_game.walk(West)
             delay(1500)
 
-            if BossFarm.lastLabel then
-                BossFarm.irPara(BossFarm.lastLabel)
-            else
-                local destino = storage.BossFarmHorario.labelConfigurado or "farmboss"
-                BossFarm.irPara(destino)
-            end
+            -- farmboss nao conta como "ultima label" aqui: voltar pra ela passava de novo pelo TP (loop).
+            -- Sem ultima label valida, vai direto pro 'start' (que retoma do proximo boss pendente).
+            local farmboss = storage.BossFarmHorario.labelConfigurado or "farmboss"
+            local volta = BossFarm.lastLabel
+            if not volta or volta == farmboss then volta = "start" end
+            BossFarm.irPara(volta)
         end
     end
 end)
@@ -655,11 +656,18 @@ function BossFarm.verificarHorario()
         local velha = not cfg.inicioRotacaoTs
             or (cfg.dataRotacao and cfg.dataRotacao ~= BossFarm.dataDoDia())
             or os.time() - cfg.inicioRotacaoTs > 3 * 3600
-        if velha then
+        -- rotacao desligada no painel (Rotacao 1/2/3) nao pode ser retomada
+        local idx = cfg.indiceRotacaoAtual
+        local desligada = idx and cfg.rotacoesAtivas and cfg.rotacoesAtivas[idx] == false
+        if velha or desligada then
             cfg.rotacaoEmAndamento = false
             cfg.horaRotacaoAtual = nil
             cfg.indiceRotacaoAtual = nil
-            BossFarm.logEvento("Rotacao antiga que ficou travada 'em andamento' foi liberada.")
+            if desligada then
+                BossFarm.logEvento("Rotacao " .. idx .. " esta DESATIVADA: nao vai retomar, rotacao em andamento liberada.")
+            else
+                BossFarm.logEvento("Rotacao antiga que ficou travada 'em andamento' foi liberada.")
+            end
         else
             local destino = cfg.labelConfigurado or "farmboss"
             BossFarm.estado = "RETOMANDO ROTACAO " .. tostring(cfg.indiceRotacaoAtual or "")
