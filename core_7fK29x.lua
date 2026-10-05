@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
-BossFarm.VERSAO = "1.0"
+BossFarm.VERSAO = "1.2"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -59,7 +59,61 @@ storage.BossFarmModeCount = storage.BossFarmModeCount or "3X"
 storage.BossFarmExecutionMode = storage.BossFarmExecutionMode or "SCHEDULE"
 storage.BossAntiTrapTPEnabled = false
 
-BossFarm.HorariosPadrao = {"05:00", "21:20", "22:20"}
+-- CONFIG POR PERSONAGEM: arquivo /BossFarm/<personagem>.json (fora da pasta bot e do storage do vBot).
+-- O storage do vBot e por config e pode falhar ao salvar (ai apos SS/relog voltava horario vazio e rotacoes
+-- desativadas). O arquivo e lido ao carregar o script e tem prioridade; e regravado a cada 1 min se mudar e no SALVAR.
+BossFarm.CAMPOS_HORARIO_ARQ = {"horariosConfigurados", "rotacoesAtivas", "ativasSalvas", "labelConfigurado", "labelPosNpc"}
+BossFarm.CAMPOS_STORAGE_ARQ = {"BossFarmRotationType", "BossFarmModeCount", "BossFarmExecutionMode", "BossFarmCustomList"}
+function BossFarm.arquivoConfig()
+    local ok, nome = pcall(function() return player:getName() end)
+    if not ok or type(nome) ~= "string" or nome == "" then return nil end
+    nome = nome:gsub("%s*%[%d+%]%s*$", "")   -- neste servidor o nome vem com o nivel: "Fulano [30]"
+    return "/BossFarm/" .. nome:lower():gsub("[^%w]+", "_"):gsub("_+$", "") .. ".json"
+end
+function BossFarm.textoConfig()
+    local dados = {horario = {}}
+    for _, k in ipairs(BossFarm.CAMPOS_HORARIO_ARQ) do dados.horario[k] = storage.BossFarmHorario[k] end
+    for _, k in ipairs(BossFarm.CAMPOS_STORAGE_ARQ) do dados[k] = storage[k] end
+    local ok, txt = pcall(function() return json.encode(dados) end)
+    return ok and txt or nil
+end
+do
+    local arq = BossFarm.arquivoConfig()
+    local ok, dados = pcall(function()
+        if not (arq and g_resources and g_resources.fileExists(arq)) then return nil end
+        return json.decode(g_resources.readFileContents(arq))
+    end)
+    if ok and type(dados) == "table" and type(dados.horario) == "table" then
+        -- copia ate o nil (ex.: ativasSalvas velho no storage nao pode sobrescrever as rotacoes do arquivo)
+        for _, k in ipairs(BossFarm.CAMPOS_HORARIO_ARQ) do storage.BossFarmHorario[k] = dados.horario[k] end
+        for _, k in ipairs(BossFarm.CAMPOS_STORAGE_ARQ) do
+            if dados[k] ~= nil then storage[k] = dados[k] end
+        end
+        print("[BossFarm] Horarios/config carregados de " .. arq)
+    elseif arq then
+        print("[BossFarm] Criando " .. arq .. " (horarios valem pra qualquer config deste personagem)")
+    end
+end
+BossFarm.ultimoArquivo = nil
+function BossFarm.gravarArquivo()
+    local arq = BossFarm.arquivoConfig()
+    if not (arq and g_resources and g_resources.writeFileContents) then return end
+    local txt = BossFarm.textoConfig()
+    if not txt or txt == BossFarm.ultimoArquivo then return end
+    if g_resources.makeDir and g_resources.directoryExists and not g_resources.directoryExists("/BossFarm") then
+        pcall(g_resources.makeDir, "/BossFarm")
+    end
+    local ok, err = pcall(g_resources.writeFileContents, arq, txt)
+    if ok then
+        BossFarm.ultimoArquivo = txt
+    elseif not BossFarm.avisouErroArquivo then
+        BossFarm.avisouErroArquivo = true
+        print("[BossFarm] ERRO ao salvar " .. arq .. ": " .. tostring(err))
+    end
+end
+macro(60000, BossFarm.gravarArquivo)   -- a cada 1 min (so grava se mudou); o botao SALVAR grava na hora
+
+BossFarm.HorariosPadrao ={"05:00", "21:20", "22:20"}
 
 function BossFarm.modoGratis()
     return storage.BossFarmExecutionMode == "ONCE"
@@ -350,7 +404,8 @@ function BossFarm.slotLiberado(i)
     if not cfg.salvoEm then return true end
     local rel = BossFarm.horaRel(cfg.horariosConfigurados[i])
     if not rel then return false end
-    return BossFarm.inicioDiaTs() + rel * 60 >= cfg.salvoEm - 59
+    -- vale se foi salvo antes do fim da janela (minuto do horario + 5 min de carencia)
+    return BossFarm.inicioDiaTs() + (rel + 5) * 60 + 59 >= cfg.salvoEm
 end
 
 function BossFarm.aplicarModoUnico()
@@ -2769,6 +2824,7 @@ if bossFarmWindow.saveScheduleButton then
 
             bossFarmWindow.saveScheduleButton:setColor("#00FA9A")
             bossFarmWindow.saveScheduleButton:setText("SALVO COM SUCESSO!")
+            BossFarm.gravarArquivo()
             BossFarm.logEvento("Horarios e Labels salvos com sucesso!")
 
             BossFarm.saveBtnTimer = os.time() + 2
