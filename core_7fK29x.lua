@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
-BossFarm.VERSAO = "1.2"
+BossFarm.VERSAO = "1.3"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -2434,6 +2434,7 @@ if autoPartyListWindow == nil then
 end
 
 bossFarmWindow = g_ui.createWidget("BossFarmWindow", g_ui.getRootWidget())
+pcall(function() bossFarmWindow:recursiveGetChildById("title"):setText("BOSS FARM PREMIUM " .. BossFarm.VERSAO) end)
 
 storage.BossFarmWindowPos = storage.BossFarmWindowPos or {x = 100, y = 100}
 bossFarmWindow:setRect({x = storage.BossFarmWindowPos.x, y = storage.BossFarmWindowPos.y, width = 270, height = 480})
