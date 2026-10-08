@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
-BossFarm.VERSAO = "1.3"
+BossFarm.VERSAO = "1.5"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -9,6 +9,7 @@ end
 
 BossFarm.ativo = macro(1000, "Boss Farm", function()
 end)
+if BossFarm.ativo.switch then BossFarm.ativo.switch:hide() end
 
 BossFarm.currentBoss = nil
 BossFarm.entrou = false
@@ -1178,6 +1179,30 @@ function BossFarm.concluirPendente(boss)
     end
 end
 
+function BossFarm.aplicarTrocaRotacao()
+    if not BossFarm.ativo or BossFarm.ativo.isOff() or BossFarm.NPC.ativo then return end
+    if BossFarm.dentroDaSala or BossFarm.salaDaPosicao(player:getPosition()) then return end
+    if #BossFarm.getActiveBosses() == 0 then return end
+    local ultima = tostring(BossFarm.lastLabel or "")
+    local alvo = tonumber(ultima:match("^boss(%d+)$"))
+    if not alvo and ultima ~= "npc" then return end
+    local proximo = BossFarm.proximoPendente()
+    if proximo == alvo then return end
+    if not proximo and ultima == "npc" then return end
+    BossFarm.currentBoss = nil
+    BossFarm.resetBoss()
+    BossFarm.buscandoPendente = false
+    BossFarm.pendenteAtual = nil
+    if proximo then
+        BossFarm.estado = "TROCA MANUAL - BOSS " .. proximo
+        BossFarm.logEvento("Troca manual aplicada: indo agora para o Boss " .. proximo)
+        BossFarm.irPara(BossFarm.label[proximo])
+    else
+        BossFarm.logEvento("Troca manual aplicada: nenhum boss pendente na rotacao nova.")
+        BossFarm.finalizarCiclo()
+    end
+end
+
 function BossFarm.tentarEntrada(boss, direcao)
     if BossFarm.buscandoPendente and BossFarm.pendenteAtual ~= boss then
         return true
@@ -1441,8 +1466,7 @@ function BossFarm.iniciarAutoNPC()
     BossFarm.NPC.concluido = false
     BossFarm.NPC.queue = {}
 
-    local ativos = BossFarm.getActiveBosses()
-    for _, i in ipairs(ativos) do
+    for i = 1, 15 do
         if storage.BossFarmNPCList[i] then
             table.insert(BossFarm.NPC.queue, i)
         end
@@ -2526,6 +2550,8 @@ for i, bName in ipairs(BossFarm.nome) do
     cbCust.onClick = function(widget)
         storage.BossFarmCustomList[i] = not storage.BossFarmCustomList[i]
         widget:setChecked(storage.BossFarmCustomList[i])
+        BossFarm.gravarArquivo()
+        BossFarm.aplicarTrocaRotacao()
     end
 end
 
@@ -2533,12 +2559,16 @@ if bossFarmWindow.btnMarcarTodos then
     bossFarmWindow.btnMarcarTodos.onClick = function()
         for i = 1, 15 do storage.BossFarmCustomList[i] = true end
         BossFarm.syncCheckboxes()
+        BossFarm.gravarArquivo()
+        BossFarm.aplicarTrocaRotacao()
     end
 end
 if bossFarmWindow.btnDesmarcarTodos then
     bossFarmWindow.btnDesmarcarTodos.onClick = function()
         for i = 1, 15 do storage.BossFarmCustomList[i] = false end
         BossFarm.syncCheckboxes()
+        BossFarm.gravarArquivo()
+        BossFarm.aplicarTrocaRotacao()
     end
 end
 
@@ -2624,6 +2654,7 @@ if bossFarmWindow.btnRot1 then
     bossFarmWindow.btnRot1.onClick = function()
         storage.BossFarmHorario.rotacoesAtivas[1] = not storage.BossFarmHorario.rotacoesAtivas[1]
         atualizarCorBotaoRotacao(bossFarmWindow.btnRot1, 1)
+        BossFarm.gravarArquivo()
     end
 end
 
@@ -2633,6 +2664,7 @@ if bossFarmWindow.btnRot2 then
         if BossFarm.modoHorarioUnico() then return end
         storage.BossFarmHorario.rotacoesAtivas[2] = not storage.BossFarmHorario.rotacoesAtivas[2]
         atualizarCorBotaoRotacao(bossFarmWindow.btnRot2, 2)
+        BossFarm.gravarArquivo()
     end
 end
 
@@ -2642,6 +2674,7 @@ if bossFarmWindow.btnRot3 then
         if BossFarm.modoHorarioUnico() then return end
         storage.BossFarmHorario.rotacoesAtivas[3] = not storage.BossFarmHorario.rotacoesAtivas[3]
         atualizarCorBotaoRotacao(bossFarmWindow.btnRot3, 3)
+        BossFarm.gravarArquivo()
     end
 end
 
@@ -2654,6 +2687,9 @@ if bossFarmWindow.toggleRotationType then
         else
             storage.BossFarmRotationType = "FULL"
         end
+        BossFarm.gravarArquivo()
+        BossFarm.logEvento("Rotacao alterada para: " .. storage.BossFarmRotationType)
+        BossFarm.aplicarTrocaRotacao()
         BossFarm.atualizarPainel()
     end
 end
@@ -2665,6 +2701,7 @@ if bossFarmWindow.toggleModeCount then
         else
             storage.BossFarmModeCount = "3X"
         end
+        BossFarm.gravarArquivo()
         BossFarm.atualizarPainel()
     end
 end
@@ -2681,6 +2718,7 @@ if bossFarmWindow.toggleContinuous then
         BossFarm.aplicarModoUnico()
         if bossFarmWindow.btnRot2 then atualizarCorBotaoRotacao(bossFarmWindow.btnRot2, 2) end
         if bossFarmWindow.btnRot3 then atualizarCorBotaoRotacao(bossFarmWindow.btnRot3, 3) end
+        BossFarm.gravarArquivo()
         BossFarm.atualizarPainel()
     end
 end
@@ -2833,6 +2871,7 @@ if bossFarmWindow.saveScheduleButton then
             bossFarmWindow.saveScheduleButton:setColor("#FF3333")
             bossFarmWindow.saveScheduleButton:setText("ERRO!")
             BossFarm.logEvento(tostring(erro))
+            BossFarm.gravarArquivo()
 
             BossFarm.saveBtnTimer = os.time() + 2
         end
