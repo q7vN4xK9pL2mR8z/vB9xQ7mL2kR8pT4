@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
-BossFarm.VERSAO = "1.5"
+BossFarm.VERSAO = "1.6"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -935,6 +935,68 @@ function BossFarm.aguardarHorarioInicio()
     BossFarm.estado = "ROTACAO INICIADA"
     return true
 end
+
+function BossFarm.harvNecessario()
+    if storage.BossFarmRotationType == "9BOSS" then return 90 end
+    if storage.BossFarmRotationType == "CUSTOM" then return #BossFarm.getActiveBosses() * 10 end
+    return 150
+end
+
+function BossFarm.proximaJanela()
+    local cfg = storage.BossFarmHorario
+    if not cfg or type(cfg.horariosConfigurados) ~= "table" then return nil end
+    local agora = os.date("*t")
+    local agoraSeg = BossFarm.minRel(agora.hour * 60 + agora.min) * 60 + agora.sec
+    local ultimo = BossFarm.modoHorarioUnico() and 1 or 3
+    local melhor, melhorResta = nil, nil
+    for i = 1, ultimo do
+        if cfg.rotacoesAtivas and cfg.rotacoesAtivas[i] ~= false and not BossFarm.slotUsado(i) and BossFarm.slotLiberado(i) then
+            local inicio = BossFarm.horaRel(cfg.horariosConfigurados[i])
+            if inicio then
+                local resta = inicio * 60 - agoraSeg
+                if resta > -6 * 60 and (not melhorResta or resta < melhorResta) then
+                    melhor, melhorResta = i, resta
+                end
+            end
+        end
+    end
+    return melhor, melhorResta
+end
+
+BossFarm.textoNome = ""
+function BossFarm.textoAcimaDoNome()
+    if BossFarm.ativo.isOff() or storage.BossFarmHorario.rotacaoEmAndamento then return "", "#FFFFFF" end
+    local slot, resta = BossFarm.proximaJanela()
+    if not slot or resta > 600 then return "", "#FFFFFF" end
+    local texto = resta > 0 and string.format("Boss Rot %d em %d:%02d", slot, math.floor(resta / 60), resta % 60)
+        or ("Boss Rot " .. slot .. " agora")
+    local avisos = ""
+    local vip = storage.BossFarmVipExpiration or 0
+    if vip > 0 then
+        local dias = math.floor((vip - os.time()) / 86400)
+        if dias < 0 then
+            avisos = avisos .. " | SEM VIP"
+        elseif vip - os.time() < 10 * 86400 then
+            avisos = avisos .. " | VIP " .. dias .. " DIAS (PRECISA 10)"
+        end
+    end
+    if not BossFarm.modoGratis() then
+        local tem, precisa = BossFarm.countItem(13201), BossFarm.harvNecessario()
+        if tem < precisa then
+            avisos = avisos .. " | FALTA HARVESTABLE " .. tem .. "/" .. precisa
+        end
+    end
+    if avisos ~= "" then return texto .. avisos, "#FF4040" end
+    return texto, "#FFD24A"
+end
+
+macro(1000, function()
+    local ok, texto, cor = pcall(BossFarm.textoAcimaDoNome)
+    if not ok then texto, cor = "", "#FFFFFF" end
+    if texto == "" and BossFarm.textoNome == "" then return end
+    BossFarm.textoNome = texto
+    pcall(function() player:setText(texto, cor) end)
+end)
 
 BossFarm.nome = {
     "Ophidian Horror", "Heart of Havoc", "Widow of Dusk", "Corrupted Grovekeeper", "Hive of Blight",
