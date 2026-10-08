@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
-BossFarm.VERSAO = "1.6"
+BossFarm.VERSAO = "1.7"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -965,37 +965,46 @@ end
 
 BossFarm.textoNome = ""
 function BossFarm.textoAcimaDoNome()
-    if BossFarm.ativo.isOff() or storage.BossFarmHorario.rotacaoEmAndamento then return "", "#FFFFFF" end
+    if BossFarm.ativo.isOff() or storage.BossFarmHorario.rotacaoEmAndamento then return "" end
     local slot, resta = BossFarm.proximaJanela()
-    if not slot or resta > 600 then return "", "#FFFFFF" end
-    local texto = resta > 0 and string.format("Boss Rot %d em %d:%02d", slot, math.floor(resta / 60), resta % 60)
-        or ("Boss Rot " .. slot .. " agora")
-    local avisos = ""
+    if not slot or resta > 600 then return "" end
+    local avisos = {}
     local vip = storage.BossFarmVipExpiration or 0
     if vip > 0 then
         local dias = math.floor((vip - os.time()) / 86400)
         if dias < 0 then
-            avisos = avisos .. " | SEM VIP"
+            table.insert(avisos, "SEM VIP")
         elseif vip - os.time() < 10 * 86400 then
-            avisos = avisos .. " | VIP " .. dias .. " DIAS (PRECISA 10)"
+            table.insert(avisos, "VIP " .. dias .. " DIAS (PRECISA 10)")
         end
     end
     if not BossFarm.modoGratis() then
         local tem, precisa = BossFarm.countItem(13201), BossFarm.harvNecessario()
         if tem < precisa then
-            avisos = avisos .. " | FALTA HARVESTABLE " .. tem .. "/" .. precisa
+            table.insert(avisos, "FALTA HARVESTABLE " .. tem .. "/" .. precisa)
         end
     end
-    if avisos ~= "" then return texto .. avisos, "#FF4040" end
-    return texto, "#FFD24A"
+    return table.concat(avisos, " | ")
+end
+
+function BossFarm.mostrarAcimaDoNome(texto)
+    local cor = "#FF4040"
+    local okT = player.setTitle and pcall(function()
+        if texto == "" then
+            if player.clearTitle then player:clearTitle() else player:setTitle("", "verdana-11px-rounded", cor) end
+        else
+            player:setTitle(texto, "verdana-11px-rounded", cor)
+        end
+    end)
+    if not okT then pcall(function() player:setText(texto, cor) end) end
 end
 
 macro(1000, function()
-    local ok, texto, cor = pcall(BossFarm.textoAcimaDoNome)
-    if not ok then texto, cor = "", "#FFFFFF" end
-    if texto == "" and BossFarm.textoNome == "" then return end
+    local ok, texto = pcall(BossFarm.textoAcimaDoNome)
+    if not ok then texto = "" end
+    if texto == BossFarm.textoNome then return end
     BossFarm.textoNome = texto
-    pcall(function() player:setText(texto, cor) end)
+    BossFarm.mostrarAcimaDoNome(texto)
 end)
 
 BossFarm.nome = {
