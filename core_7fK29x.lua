@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
-BossFarm.VERSAO = "1.8"
+BossFarm.VERSAO = "1.9"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -276,13 +276,13 @@ function BossFarm.aguardarMinuto27()
     local min = tonumber(os.date("%M"))
     local sec = tonumber(os.date("%S"))
 
-    if min > 26 or (min == 26 and sec >= 40) then
+    if min > 28 or (min == 28 and sec >= 10) then
         BossFarm.estado = "HORARIO 3X ATINGIDO! AVANCANDO"
         return true
     end
 
-    local faltaMin = 26 - min
-    local faltaSec = 40 - sec
+    local faltaMin = 28 - min
+    local faltaSec = 10 - sec
 
     if faltaSec < 0 then
         faltaSec = faltaSec + 60
@@ -1508,6 +1508,7 @@ function BossFarm.iniciarAutoNPC()
     BossFarm.NPC.ativo = true
     BossFarm.NPC.concluido = false
     BossFarm.NPC.queue = {}
+    BossFarm.NPC.timer = os.time()
 
     for i = 1, 15 do
         if storage.BossFarmNPCList[i] then
@@ -1517,10 +1518,36 @@ function BossFarm.iniciarAutoNPC()
     BossFarm.logEvento("Final da rotacao: Iniciando limpeza de " .. #BossFarm.NPC.queue .. " bosses derrotados.")
 end
 
+BossFarm.NPC_NOME = "Seraphina Timeweaver"
+
+function BossFarm.acharNpc()
+    local alvo = BossFarm.NPC_NOME:lower()
+    for _, spec in ipairs(getSpectators()) do
+        if spec:getName():lower() == alvo then return spec end
+    end
+    return nil
+end
+
 function BossFarm.processarNPC()
     if BossFarm.NPC.concluido then return end
 
     if BossFarm.NPC.etapa == 0 then
+        local npc = BossFarm.acharNpc()
+        local esperando = os.time() - (BossFarm.NPC.timer or 0)
+        if npc then
+            if g_game.getFollowingCreature() ~= npc then g_game.follow(npc) end
+            local p, n = player:getPosition(), npc:getPosition()
+            local perto = p and n and p.z == n.z and math.max(math.abs(p.x - n.x), math.abs(p.y - n.y)) <= 2
+            if not perto and esperando < 8 then
+                BossFarm.estado = "NPC - SEGUINDO " .. BossFarm.NPC_NOME:upper()
+                return
+            end
+        elseif esperando < 5 then
+            BossFarm.estado = "NPC - PROCURANDO " .. BossFarm.NPC_NOME:upper()
+            return
+        else
+            BossFarm.logEvento("NPC: " .. BossFarm.NPC_NOME .. " nao apareceu na tela. Falando hi assim mesmo.")
+        end
         BossFarm.estado = "NPC - ENVIANDO HI"
         BossFarm.logEvento("NPC: Iniciando conversa com 'hi'")
         NPC.say("hi")
@@ -1542,6 +1569,7 @@ function BossFarm.processarNPC()
                 BossFarm.NPC.ativo = false
                 BossFarm.NPC.concluido = true
                 BossFarm.estado = "LIMPEZA CONCLUIDA"
+                if g_game.getFollowingCreature() then g_game.cancelFollow() end
 
                 if BossFarm.NPC.modo == "AUTO" then
 
@@ -2134,7 +2162,7 @@ BossFarmWindow < UIWindow
 
     BossFarmBtn
       id: toggleModeCount
-      text: HORARIO: 3X (ESPERA 26:40)
+      text: HORARIO: 3X
       height: 18
       color: #7FFF00
       margin-top: 2
@@ -2621,6 +2649,7 @@ bossFarmWindow.forceCleanButton.onClick = function()
     BossFarm.NPC.ativo = true
     BossFarm.NPC.concluido = false
     BossFarm.NPC.queue = {}
+    BossFarm.NPC.timer = os.time()
     for i = 1, 15 do
         if storage.BossFarmNPCList[i] then
             table.insert(BossFarm.NPC.queue, i)
@@ -3056,7 +3085,7 @@ function BossFarm.atualizarPainel()
             bossFarmWindow.toggleModeCount:setText("HORARIO: 1X (LIVRE)")
             bossFarmWindow.toggleModeCount:setColor("#A52A2A")
         else
-            bossFarmWindow.toggleModeCount:setText("HORARIO: 3X (ESPERA 26:40)")
+            bossFarmWindow.toggleModeCount:setText("HORARIO: 3X")
             bossFarmWindow.toggleModeCount:setColor("#7FFF00")
         end
     end
@@ -3179,8 +3208,19 @@ function BossFarm.atualizarPainel()
 
         local texto = "PENDENTE"
         local cor = "#AAAAAA"
+        local loop = storage.BossFarmExecutionMode == "LOOP"
+        local feitas = cfg.rotacoesFeitas or 0
 
-        if BossFarm.modoHorarioUnico() and i >= 2 then
+        if loop and feitas >= i then
+            texto = "CONCLUIDA"
+            cor = "#00FA9A"
+        elseif loop and cfg.rotacaoEmAndamento and feitas + 1 == i then
+            texto = "EM ROTACAO"
+            cor = "#FFFF00"
+        elseif loop and i >= 2 then
+            texto = "PENDENTE"
+            cor = "#AAAAAA"
+        elseif BossFarm.modoHorarioUnico() and i >= 2 then
             texto = "NAO USADA"
             cor = "#555555"
         elseif cfg.rotacoesAtivas and cfg.rotacoesAtivas[i] == false then
