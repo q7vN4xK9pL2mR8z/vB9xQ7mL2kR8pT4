@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
-BossFarm.VERSAO = "1.9"
+BossFarm.VERSAO = "2.1"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -58,13 +58,14 @@ storage.BossFarmVipExpiration = storage.BossFarmVipExpiration or 0
 
 storage.BossFarmModeCount = storage.BossFarmModeCount or "3X"
 storage.BossFarmExecutionMode = storage.BossFarmExecutionMode or "SCHEDULE"
+storage.BossFarmAvisoNome = storage.BossFarmAvisoNome or false
 storage.BossAntiTrapTPEnabled = false
 
 -- CONFIG POR PERSONAGEM: arquivo /BossFarm/<personagem>.json (fora da pasta bot e do storage do vBot).
 -- O storage do vBot e por config e pode falhar ao salvar (ai apos SS/relog voltava horario vazio e rotacoes
 -- desativadas). O arquivo e lido ao carregar o script e tem prioridade; e regravado a cada 1 min se mudar e no SALVAR.
 BossFarm.CAMPOS_HORARIO_ARQ = {"horariosConfigurados", "rotacoesAtivas", "ativasSalvas", "labelConfigurado", "labelPosNpc"}
-BossFarm.CAMPOS_STORAGE_ARQ = {"BossFarmRotationType", "BossFarmModeCount", "BossFarmExecutionMode", "BossFarmCustomList"}
+BossFarm.CAMPOS_STORAGE_ARQ = {"BossFarmRotationType", "BossFarmModeCount", "BossFarmExecutionMode", "BossFarmCustomList", "BossFarmAvisoNome"}
 function BossFarm.arquivoConfig()
     local ok, nome = pcall(function() return player:getName() end)
     if not ok or type(nome) ~= "string" or nome == "" then return nil end
@@ -183,6 +184,39 @@ function BossFarm.irPara(label)
     CaveBot.gotoLabel(label)
 end
 
+BossFarm.PASSE_SEG = 600
+BossFarm.passeAte = 0
+
+function BossFarm.darPasse()
+    BossFarm.passeAte = os.time() + BossFarm.PASSE_SEG
+end
+
+function BossFarm.primeiraLabel()
+    local lista = CaveBot.actionList
+    if not lista then return nil end
+    for _, child in ipairs(lista:getChildren()) do
+        if child.action == "label" then return child.value end
+    end
+    return nil
+end
+
+function BossFarm.travaFarmboss()
+    if os.time() <= (BossFarm.passeAte or 0) then return true end
+    BossFarm.estado = "FARMBOSS SEM PASSE"
+    local volta = BossFarm.primeiraLabel()
+    if volta and CaveBot.gotoLabel(volta) then
+        BossFarm.lastLabel = volta
+        BossFarm.logEvento("Farmboss sem passe! Voltando para a 1a label: " .. volta)
+        return "retry"
+    end
+    if os.time() - (BossFarm.lastTravaWarn or 0) >= 5 then
+        BossFarm.lastTravaWarn = os.time()
+        BossFarm.logEvento("Farmboss sem passe! Nenhuma label achada na CaveBot, parado antes do TP.")
+    end
+    delay(1000)
+    return "retry"
+end
+
 macro(500, function()
     if BossFarm.ativo.isOff() then return end
     for _, spec in ipairs(getSpectators()) do
@@ -215,6 +249,7 @@ macro(1000, function()
     local inBossArea = (myPos.z == 3 and myPos.x >= 7610 and myPos.x <= 7700 and myPos.y >= 1020 and myPos.y <= 1084)
 
     if inBossArea then
+        BossFarm.passeAte = 0
 
         if not storage.BossAntiTrapTPEnabled then
             storage.BossAntiTrapTPEnabled = true
@@ -728,6 +763,7 @@ function BossFarm.verificarHorario()
             local destino = cfg.labelConfigurado or "farmboss"
             BossFarm.estado = "RETOMANDO ROTACAO " .. tostring(cfg.indiceRotacaoAtual or "")
             BossFarm.logEvento("Checkin: a rotacao ainda nao saiu da cave. Indo de novo para: " .. destino)
+            BossFarm.darPasse()
             BossFarm.irPara(destino)
             return "retry"
         end
@@ -812,6 +848,7 @@ function BossFarm.verificarHorario()
 
             local destino = cfg.labelConfigurado or "farmboss"
             BossFarm.logEvento("Engatando rotacao " .. slotValido .. ". Indo para: " .. destino)
+            BossFarm.darPasse()
             BossFarm.irPara(destino)
             return "retry"
         else
@@ -871,6 +908,7 @@ function BossFarm.verificarHorario()
 
                         local destino = cfg.labelConfigurado or "farmboss"
                         BossFarm.logEvento("Horario atingido! Iniciando e indo para a label: " .. destino)
+                        BossFarm.darPasse()
                         BossFarm.irPara(destino)
                         return "retry"
                     end
@@ -944,7 +982,7 @@ end
 
 BossFarm.textoNome = ""
 function BossFarm.textoAcimaDoNome()
-    if BossFarm.ativo.isOff() then return "" end
+    if BossFarm.ativo.isOff() or not storage.BossFarmAvisoNome then return "" end
     local avisos = {}
     local vip = storage.BossFarmVipExpiration or 0
     if vip > 0 then
@@ -2246,6 +2284,23 @@ BossFarmWindow < UIWindow
         width: 118
         color: #00FF00
 
+    Panel
+      height: 18
+      margin-top: 2
+      layout:
+        type: horizontalBox
+        spacing: 0
+      UILabel
+        text: AVISO NO NOME:
+        width: 140
+        color: #F0FFF0
+        font: verdana-11px-rounded
+      BossFarmBtn
+        id: toggleAvisoNome
+        text: DESATIVADO
+        width: 118
+        color: #B03060
+
     BossFarmBtn
       id: editPartyList
       text: SETUP AUTO PARTY
@@ -2566,6 +2621,7 @@ bossFarmWindow.toggleModeCount = bossFarmWindow:recursiveGetChildById("toggleMod
 bossFarmWindow.toggleChase = bossFarmWindow:recursiveGetChildById("toggleChase")
 bossFarmWindow.toggleParty = bossFarmWindow:recursiveGetChildById("toggleParty")
 bossFarmWindow.toggleAntiTrap = bossFarmWindow:recursiveGetChildById("toggleAntiTrap")
+bossFarmWindow.toggleAvisoNome = bossFarmWindow:recursiveGetChildById("toggleAvisoNome")
 bossFarmWindow.editPartyList = bossFarmWindow:recursiveGetChildById("editPartyList")
 
 bossFarmWindow.btnRot1 = bossFarmWindow:recursiveGetChildById("btnRot1")
@@ -2798,6 +2854,14 @@ end
 if bossFarmWindow.toggleChase then
     bossFarmWindow.toggleChase.onClick = function()
         storage.BossAutoFollowEnabled = not storage.BossAutoFollowEnabled
+        BossFarm.atualizarPainel()
+    end
+end
+
+if bossFarmWindow.toggleAvisoNome then
+    bossFarmWindow.toggleAvisoNome.onClick = function()
+        storage.BossFarmAvisoNome = not storage.BossFarmAvisoNome
+        BossFarm.gravarArquivo()
         BossFarm.atualizarPainel()
     end
 end
@@ -3110,6 +3174,16 @@ function BossFarm.atualizarPainel()
         else
             bossFarmWindow.toggleChase:setText("DESATIVADO")
             bossFarmWindow.toggleChase:setColor("#B03060")
+        end
+    end
+
+    if bossFarmWindow.toggleAvisoNome then
+        if storage.BossFarmAvisoNome then
+            bossFarmWindow.toggleAvisoNome:setText("ATIVO")
+            bossFarmWindow.toggleAvisoNome:setColor("#00FA9A")
+        else
+            bossFarmWindow.toggleAvisoNome:setText("DESATIVADO")
+            bossFarmWindow.toggleAvisoNome:setColor("#B03060")
         end
     end
 
