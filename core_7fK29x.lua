@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 BossFarm = BossFarm or {}
-BossFarm.VERSAO = "2.1"
+BossFarm.VERSAO = "2.9"
 
 if bossFarmWindow then
     bossFarmWindow:destroy()
@@ -59,13 +59,15 @@ storage.BossFarmVipExpiration = storage.BossFarmVipExpiration or 0
 storage.BossFarmModeCount = storage.BossFarmModeCount or "3X"
 storage.BossFarmExecutionMode = storage.BossFarmExecutionMode or "SCHEDULE"
 storage.BossFarmAvisoNome = storage.BossFarmAvisoNome or false
+storage.BossFarmModoCave = storage.BossFarmModoCave or "UNICO"
+storage.BossFarmDelayEntrada = storage.BossFarmDelayEntrada or 1
 storage.BossAntiTrapTPEnabled = false
 
 -- CONFIG POR PERSONAGEM: arquivo /BossFarm/<personagem>.json (fora da pasta bot e do storage do vBot).
 -- O storage do vBot e por config e pode falhar ao salvar (ai apos SS/relog voltava horario vazio e rotacoes
 -- desativadas). O arquivo e lido ao carregar o script e tem prioridade; e regravado a cada 1 min se mudar e no SALVAR.
 BossFarm.CAMPOS_HORARIO_ARQ = {"horariosConfigurados", "rotacoesAtivas", "ativasSalvas", "labelConfigurado", "labelPosNpc"}
-BossFarm.CAMPOS_STORAGE_ARQ = {"BossFarmRotationType", "BossFarmModeCount", "BossFarmExecutionMode", "BossFarmCustomList", "BossFarmAvisoNome"}
+BossFarm.CAMPOS_STORAGE_ARQ = {"BossFarmRotationType", "BossFarmModeCount", "BossFarmExecutionMode", "BossFarmCustomList", "BossFarmAvisoNome", "BossFarmModoCave", "BossFarmDelayEntrada", "BossFarmCaveHunt"}
 function BossFarm.arquivoConfig()
     local ok, nome = pcall(function() return player:getName() end)
     if not ok or type(nome) ~= "string" or nome == "" then return nil end
@@ -181,8 +183,594 @@ function BossFarm.irPara(label)
     if label == "start" or string.find(label, "boss") then
         storage.BossAntiTrapTPEnabled = true
     end
+    if BossFarm.modoSeparado() then
+        local destino = BossFarm.labelDaRota(label) and BossFarm.CAVE_BOSS or storage.BossFarmCaveHunt
+        local atual = BossFarm.caveAtual()
+        if destino and destino ~= "" and atual ~= destino then
+            if destino == BossFarm.CAVE_BOSS and atual then storage.BossFarmCaveHunt = atual BossFarm.gravarArquivo() end
+            if BossFarm.trocarCave(destino) then
+                BossFarm.labelAposTroca = label
+                BossFarm.labelAposTrocaAte = os.time() + 5
+                return
+            end
+        end
+    end
     CaveBot.gotoLabel(label)
 end
+
+BossFarm.CAVE_BOSS = "farmboss"
+
+BossFarm.ROTA_CAVE_BOSS = [==[
+label:start
+goto:7668,1051,3
+goto:7670,1051,3
+goto:7676,1051,3
+delaysec:5
+function:return BossFarm.aguardarMinuto27()
+delaysec:1,5
+function:[[
+BossFarm.iniciarNovaRotacao()
+return true
+]]
+delaysec:1,5
+function:[[
+BossFarm.checarProximoCustom()
+return true
+]]
+delaysec:1,5
+goto:7673,1051,3
+goto:7677,1051,3
+goto:7680,1051,3
+goto:7684,1051,3
+goto:7686,1051,3
+goto:7687,1051,3
+goto:7687,1052,3
+goto:7687,1053,3
+goto:7686,1056,3
+goto:7686,1061,3
+goto:7686,1066,3
+goto:7688,1066,3
+goto:7688,1070,3
+goto:7688,1072,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(1)
+local p = pos()
+if p.x == 7688 and p.z == 3 and p.y >= 1066 and p.y <= 1074 then
+    return BossFarm.tentarEntrada(p.y - 1065, South)
+end
+return true
+]]
+label:boss1
+goto:7688,1074,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(1)
+local p = pos()
+if p.x == 7688 and p.y == 1074 and p.z == 3 then
+    return BossFarm.tentarEntrada(1, South)
+end
+return true
+]]
+goto:7774,1433,3
+goto:7774,1428,3
+goto:7774,1423,3
+goto:7775,1419,3
+goto:7775,1414,3
+goto:7774,1412,3
+label:spawn1
+function:return BossFarm.waitBossDead(1)
+label:boss2
+goto:7687,1069,3
+goto:7687,1065,3
+goto:7687,1063,3
+goto:7687,1061,3
+goto:7691,1061,3
+goto:7694,1061,3
+goto:7696,1061,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(2)
+local p = pos()
+if p.x == 7696 and p.y == 1061 and p.z == 3 then
+    return BossFarm.tentarEntrada(2, East)
+end
+return true
+]]
+goto:7699,1278,5
+goto:7699,1273,5
+goto:7703,1273,5
+goto:7706,1269,5
+goto:7707,1266,5
+goto:7704,1265,5
+goto:7700,1265,5
+goto:7700,1263,5
+goto:7700,1258,6
+goto:7695,1254,6
+goto:7690,1255,6
+label:spawn2
+function:return BossFarm.waitBossDead(2)
+label:boss3
+goto:7690,1061,3
+goto:7688,1061,3
+goto:7687,1058,3
+goto:7687,1056,3
+goto:7687,1052,3
+goto:7687,1050,3
+goto:7691,1049,3
+goto:7695,1049,3
+goto:7696,1049,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(3)
+local p = pos()
+if p.x == 7696 and p.y == 1049 and p.z == 3 then
+    return BossFarm.tentarEntrada(3, East)
+end
+return true
+]]
+goto:7943,1295,2
+goto:7946,1295,2
+goto:7948,1295,2
+goto:7949,1295,2
+goto:7951,1295,3,0
+goto:7956,1295,4
+goto:7960,1300,4
+goto:7965,1302,4
+goto:7970,1301,4
+goto:7970,1298,4
+goto:7970,1297,4
+goto:7970,1295,4
+label:spawn3
+function:return BossFarm.waitBossDead(3)
+label:boss4
+goto:7690,1049,3
+goto:7687,1049,3
+goto:7687,1044,3
+goto:7687,1042,3
+goto:7687,1038,3
+goto:7690,1037,3
+goto:7693,1035,3
+goto:7695,1033,3
+goto:7696,1033,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(4)
+local p = pos()
+if p.x == 7696 and p.y == 1033 and p.z == 3 then
+    return BossFarm.tentarEntrada(4, East)
+end
+return true
+]]
+goto:7934,1144,4
+goto:7934,1141,4
+goto:7934,1140,4
+goto:7934,1135,5
+goto:7938,1130,5
+goto:7938,1125,5
+goto:7933,1123,5
+label:spawn4
+function:return BossFarm.waitBossDead(4)
+label:boss5
+goto:7690,1036,3
+goto:7686,1037,3
+goto:7683,1037,3
+goto:7681,1034,3
+goto:7681,1030,3
+goto:7681,1027,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(5)
+local p = pos()
+if p.x == 7681 and p.y == 1027 and p.z == 3 then
+    return BossFarm.tentarEntrada(5, North)
+end
+return true
+]]
+goto:7935,1205,4
+goto:7935,1208,4
+goto:7935,1212,4
+goto:7935,1214,4
+goto:7935,1215,4
+goto:7935,1220,5
+goto:7935,1225,5
+goto:7935,1228,5
+label:spawn5
+function:return BossFarm.waitBossDead(5)
+label:boss6
+goto:7681,1034,3
+goto:7679,1036,3
+goto:7674,1037,3
+goto:7671,1037,3
+goto:7670,1033,3
+goto:7670,1030,3
+goto:7670,1027,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(6)
+local p = pos()
+if p.x == 7670 and p.y == 1027 and p.z == 3 then
+    return BossFarm.tentarEntrada(6, North)
+end
+return true
+]]
+goto:7774,1362,2
+goto:7777,1362,2
+goto:7778,1362,2
+goto:7783,1362,3
+goto:7788,1360,3
+goto:7793,1360,3
+goto:7798,1356,3
+goto:7799,1351,3
+goto:7799,1348,3
+label:spawn6
+function:return BossFarm.waitBossDead(6)
+label:boss7
+goto:7670,1034,3
+goto:7667,1034,3
+goto:7663,1034,3
+goto:7658,1034,3
+goto:7658,1030,3
+goto:7658,1027,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(7)
+local p = pos()
+if p.x == 7658 and p.y == 1027 and p.z == 3 then
+    return BossFarm.tentarEntrada(7, North)
+end
+return true
+]]
+goto:7699,1203,4
+goto:7699,1199,4
+goto:7699,1194,4
+goto:7699,1191,4
+goto:7698,1188,4
+goto:7698,1183,4
+goto:7698,1179,4
+label:spawn7
+function:return BossFarm.waitBossDead(7)
+label:boss8
+goto:7658,1034,3
+goto:7655,1036,3
+goto:7649,1036,3
+goto:7645,1036,3
+goto:7645,1033,3
+goto:7644,1030,3
+goto:7644,1026,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(8)
+local p = pos()
+if p.x == 7644 and p.y == 1026 and p.z == 3 then
+    return BossFarm.tentarEntrada(8, North)
+end
+return true
+]]
+goto:7844,1116,5
+goto:7844,1120,5
+goto:7844,1126,5
+goto:7844,1130,5
+goto:7844,1133,5
+label:spawn8
+function:return BossFarm.waitBossDead(8)
+label:boss9
+goto:7644,1035,3
+goto:7644,1036,3
+goto:7644,1037,3
+goto:7639,1038,3
+goto:7636,1038,3
+goto:7632,1038,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(9)
+local p = pos()
+if p.x == 7632 and p.y == 1038 and p.z == 3 then
+    return BossFarm.tentarEntrada(9, West)
+end
+return true
+]]
+goto:7805,1229,3
+goto:7805,1225,3
+goto:7805,1222,3
+goto:7805,1221,3
+goto:7810,1218,4
+goto:7815,1218,4
+goto:7816,1216,4,0
+goto:7821,1212,3
+goto:7822,1207,3
+goto:7824,1202,3
+goto:7825,1197,3
+goto:7825,1192,3
+goto:7823,1187,3
+goto:7819,1187,3,0
+goto:7814,1186,2
+label:spawn9
+function:return BossFarm.waitBossDead(9)
+label:boss10
+goto:7640,1038,3
+goto:7643,1038,3
+goto:7644,1041,3
+goto:7644,1045,3
+goto:7644,1049,3
+goto:7644,1053,3
+goto:7641,1053,3
+goto:7637,1052,3
+goto:7634,1052,3
+goto:7632,1052,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(10)
+local p = pos()
+if p.x == 7632 and p.y == 1052 and p.z == 3 then
+    return BossFarm.tentarEntrada(10, West)
+end
+return true
+]]
+goto:7638,1130,3
+goto:7639,1134,3
+goto:7640,1137,3
+goto:7642,1140,3
+goto:7639,1140,3
+goto:7638,1140,3
+goto:7636,1140,3,0
+goto:7631,1140,2
+goto:7630,1135,2
+goto:7627,1130,2
+goto:7627,1125,2
+goto:7622,1125,2
+goto:7617,1123,2
+goto:7612,1123,2
+goto:7612,1126,2,0
+goto:7615,1131,3
+goto:7615,1136,3
+goto:7612,1136,3
+label:spawn10
+function:return BossFarm.waitBossDead(10)
+label:boss11
+goto:7638,1052,3
+goto:7640,1052,3
+goto:7643,1052,3
+goto:7643,1057,3
+goto:7643,1063,3
+goto:7640,1064,3
+goto:7636,1064,3
+goto:7633,1064,3
+goto:7631,1064,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(11)
+local p = pos()
+if p.x == 7631 and p.y == 1064 and p.z == 3 then
+    return BossFarm.tentarEntrada(11, West)
+end
+return true
+]]
+goto:7799,1116,4
+goto:7794,1118,4
+goto:7790,1118,4
+goto:7786,1118,4
+goto:7786,1127,4
+goto:7783,1127,4
+label:spawn11
+function:return BossFarm.waitBossDead(11)
+label:boss12
+goto:7639,1065,3
+goto:7643,1065,3
+goto:7644,1067,3
+goto:7644,1071,3
+goto:7644,1074,3
+goto:7644,1075,3
+goto:7644,1077,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(12)
+local p = pos()
+if p.x == 7644 and p.y == 1077 and p.z == 3 then
+    return BossFarm.tentarEntrada(12, South)
+end
+return true
+]]
+goto:7936,1386,4
+goto:7938,1390,4
+goto:7942,1388,4
+goto:7942,1381,4
+goto:7944,1378,4
+label:spawn12
+function:return BossFarm.waitBossDead(12)
+label:boss13
+goto:7645,1070,3
+goto:7645,1068,3
+goto:7648,1068,3
+goto:7651,1067,3
+goto:7656,1067,3
+goto:7658,1073,3
+goto:7657,1074,3
+goto:7657,1075,3
+goto:7657,1077,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(13)
+local p = pos()
+if p.x == 7657 and p.y == 1077 and p.z == 3 then
+    return BossFarm.tentarEntrada(13, South)
+end
+return true
+]]
+goto:7704,1153,4
+goto:7704,1149,4
+goto:7704,1143,4
+goto:7704,1137,4
+goto:7704,1132,4
+goto:7704,1128,4
+label:spawn13
+function:return BossFarm.waitBossDead(13)
+label:boss14
+goto:7658,1070,3
+goto:7660,1067,3
+goto:7664,1067,3
+goto:7667,1067,3
+goto:7669,1071,3
+goto:7668,1073,3
+goto:7668,1075,3
+goto:7668,1077,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(14)
+local p = pos()
+if p.x == 7668 and p.y == 1077 and p.z == 3 then
+    return BossFarm.tentarEntrada(14, South)
+end
+return true
+]]
+goto:7791,1277,4
+goto:7791,1283,4
+goto:7791,1287,4
+goto:7791,1292,4
+label:spawn14
+function:return BossFarm.waitBossDead(14)
+label:boss15
+goto:7668,1069,3
+goto:7672,1068,3
+goto:7677,1068,3
+goto:7678,1071,3
+goto:7678,1075,3
+goto:7678,1077,3
+function:return BossFarm.esperaEntrada()
+function:[[
+BossFarm.setCurrent(15)
+local p = pos()
+if p.x == 7678 and p.y == 1077 and p.z == 3 then
+    return BossFarm.tentarEntrada(15, South)
+end
+return true
+]]
+goto:7697,1348,5
+goto:7697,1349,5
+goto:7697,1349,5
+goto:7697,1354,5
+goto:7697,1358,5
+goto:7697,1363,5
+goto:7695,1366,5
+goto:7696,1368,5
+goto:7696,1372,5
+goto:7696,1374,5
+goto:7696,1374,5
+label:spawn15
+function:return BossFarm.waitBossDead(15)
+delaysec:2
+function:return BossFarm.checarPendentesFinal()
+label:npc
+delaysec:3
+goto:7678,1069,3
+goto:7674,1068,3
+goto:7670,1068,3
+goto:7665,1068,3
+goto:7665,1065,3
+goto:7665,1061,3
+goto:7665,1051,3
+goto:7665,1051,3
+delaysec:1
+function:return BossFarm.fazerNPC()
+]==]
+
+function BossFarm.arquivoCaveBoss()
+    local nomeConfig = nil
+    pcall(function() nomeConfig = modules.game_bot.contentsPanel.config:getCurrentOption().text end)
+    if not nomeConfig then return nil end
+    return "/bot/" .. nomeConfig .. "/cavebot_configs/" .. BossFarm.CAVE_BOSS .. ".cfg"
+end
+
+function BossFarm.instalarCaveBoss()
+    local arq = BossFarm.arquivoCaveBoss()
+    if not (arq and g_resources and g_resources.writeFileContents) then return false end
+    local okL, atual = pcall(function()
+        if not g_resources.fileExists(arq) then return nil end
+        return g_resources.readFileContents(arq)
+    end)
+    if okL and atual == BossFarm.ROTA_CAVE_BOSS then return true end
+    local ok, err = pcall(g_resources.writeFileContents, arq, BossFarm.ROTA_CAVE_BOSS)
+    if ok then
+        BossFarm.logEvento("CaveBot '" .. BossFarm.CAVE_BOSS .. "' criado/atualizado em " .. arq)
+    else
+        BossFarm.logEvento("ERRO ao criar " .. arq .. ": " .. tostring(err))
+    end
+    return ok
+end
+
+function BossFarm.modoSeparado()
+    return storage.BossFarmModoCave == "SEPARADO"
+end
+
+function BossFarm.labelDaRota(label)
+    label = tostring(label or ""):lower()
+    return label == "start" or label == "npc" or label:match("^boss%d+$") ~= nil or label:match("^spawn%d+$") ~= nil
+end
+
+function BossFarm.caveAtual()
+    if not (CaveBot and CaveBot.getCurrentProfile) then return nil end
+    local ok, nome = pcall(CaveBot.getCurrentProfile)
+    if ok and nome then return nome end
+    return nil
+end
+
+function BossFarm.trocarCave(nome)
+    if not (CaveBot and CaveBot.setCurrentProfile) then
+        BossFarm.logEvento("Seu vBot nao permite trocar o CaveBot por script (falta setCurrentProfile).")
+        return false
+    end
+    if nome == BossFarm.CAVE_BOSS then BossFarm.instalarCaveBoss() end
+    local ok, err = pcall(CaveBot.setCurrentProfile, nome)
+    if not ok or BossFarm.caveAtual() ~= nome then
+        BossFarm.logEvento("Erro ao trocar para o CaveBot '" .. tostring(nome) .. "': " .. tostring(err or "perfil nao existe"))
+        return false
+    end
+    BossFarm.logEvento("CaveBot trocado para '" .. nome .. "'.")
+    return true
+end
+
+function BossFarm.esperaEntrada()
+    local seg = tonumber(storage.BossFarmDelayEntrada) or 1
+    if seg > 0 then CaveBot.delay(math.floor(seg * 1000)) end
+    return true
+end
+
+macro(100, function()
+    local label = BossFarm.labelAposTroca
+    if not label then return end
+    if CaveBot.gotoLabel(label) then
+        BossFarm.labelAposTroca = nil
+    elseif os.time() > (BossFarm.labelAposTrocaAte or 0) then
+        BossFarm.labelAposTroca = nil
+        BossFarm.logEvento("Label '" .. label .. "' nao existe no CaveBot '" .. tostring(BossFarm.caveAtual()) .. "'.")
+    end
+end)
+
+function BossFarm.naZonaBoss(p)
+    return p and p.x >= 7550 and p.x <= 8050 and p.y >= 1000 and p.y <= 1500
+end
+
+BossFarm.foraDaZonaDesde = nil
+macro(1000, function()
+    if not BossFarm.modoSeparado() or BossFarm.caveAtual() ~= BossFarm.CAVE_BOSS then
+        BossFarm.foraDaZonaDesde = nil
+        return
+    end
+    if BossFarm.naZonaBoss(player:getPosition()) then
+        BossFarm.foraDaZonaDesde = nil
+        return
+    end
+    BossFarm.foraDaZonaDesde = BossFarm.foraDaZonaDesde or os.time()
+    if os.time() - BossFarm.foraDaZonaDesde < 20 then return end
+    BossFarm.foraDaZonaDesde = nil
+    local hunt = storage.BossFarmCaveHunt
+    if not hunt or hunt == "" then
+        BossFarm.logEvento("Vigia: fora da area dos bosses no CaveBot '" .. BossFarm.CAVE_BOSS .. "', mas o CaveBot da hunt nao e conhecido. Troque manualmente.")
+        return
+    end
+    BossFarm.logEvento("Vigia: 20s fora da area dos bosses (morte/queda/relog). Voltando para o CaveBot da hunt '" .. hunt .. "'.")
+    BossFarm.trocarCave(hunt)
+end)
 
 BossFarm.PASSE_SEG = 600
 BossFarm.passeAte = 0
@@ -240,16 +828,26 @@ macro(500, function()
     end
 end)
 
+function BossFarm.noLobby(p)
+    return p and p.z == 3 and p.x >= 7610 and p.x <= 7700 and p.y >= 1020 and p.y <= 1084
+end
+
 macro(1000, function()
     if BossFarm.ativo.isOff() then return end
 
     local myPos = player:getPosition()
     if not myPos then return end
 
-    local inBossArea = (myPos.z == 3 and myPos.x >= 7610 and myPos.x <= 7700 and myPos.y >= 1020 and myPos.y <= 1084)
+    local inBossArea = BossFarm.noLobby(myPos)
 
     if inBossArea then
+        local comPasse = os.time() <= (BossFarm.passeAte or 0)
         BossFarm.passeAte = 0
+        if comPasse and BossFarm.modoSeparado() and BossFarm.caveAtual() ~= BossFarm.CAVE_BOSS then
+            storage.BossFarmStartForcado = true
+            BossFarm.logEvento("Chegou na sala dos TPs: trocando para o CaveBot '" .. BossFarm.CAVE_BOSS .. "'.")
+            BossFarm.irPara("start")
+        end
 
         if not storage.BossAntiTrapTPEnabled then
             storage.BossAntiTrapTPEnabled = true
@@ -305,8 +903,88 @@ macro(1000, function()
     end
 end)
 
+function BossFarm.contarTime()
+    local party = storage.autoParty or {}
+    local meuNome = BossFarm.normalizarNomePlayer(player:getName())
+    local nomes, vistos = {}, {}
+    local function adicionar(nome)
+        nome = BossFarm.normalizarNomePlayer(nome)
+        local chave = nome:lower()
+        if nome ~= "" and chave ~= "leader" and not vistos[chave] and not BossFarm.nomePlayerIgual(nome, meuNome) then
+            vistos[chave] = true
+            table.insert(nomes, nome)
+        end
+    end
+    adicionar(party.leaderName)
+    for _, nome in ipairs(party.autoPartyList or {}) do adicionar(nome) end
+    if #nomes == 0 then return 0, 0 end
+
+    local naParty = (player:getShield() or 0) >= 3
+    local juntos = 0
+    for _, nome in ipairs(nomes) do
+        for _, spec in ipairs(getSpectators()) do
+            if spec:isPlayer() and BossFarm.nomePlayerIgual(spec:getName(), nome) then
+                if naParty and (spec:getShield() or 0) >= 3 then juntos = juntos + 1 end
+                break
+            end
+        end
+    end
+    return juntos, #nomes
+end
+
+BossFarm.timerNome = ""
+function BossFarm.mostrarTimerNome(texto)
+    if BossFarm.timerNome == texto then return end
+    BossFarm.timerNome = texto
+    pcall(function()
+        if texto == "" then
+            if player.clearTitle then player:clearTitle() else player:setTitle("", "verdana-11px-rounded", "#FFFF00") end
+        else
+            player:setTitle(texto, "verdana-11px-rounded", "#FFFF00")
+        end
+    end)
+end
+
+macro(1000, function()
+    if BossFarm.timerNome ~= "" and os.time() - (BossFarm.esperaTimeUltima or 0) > 3 then
+        BossFarm.mostrarTimerNome("")
+    end
+end)
+
+function BossFarm.aguardarTime()
+    local minutos = tonumber((storage.autoParty or {}).esperaTime) or 0
+    if minutos <= 0 then return true end
+    local juntos, total = BossFarm.contarTime()
+    if total == 0 then return true end
+
+    if os.time() - (BossFarm.esperaTimeUltima or 0) > 10 then BossFarm.esperaTimeDesde = nil end
+    BossFarm.esperaTimeUltima = os.time()
+    BossFarm.esperaTimeDesde = BossFarm.esperaTimeDesde or os.time()
+    local passou = os.time() - BossFarm.esperaTimeDesde
+    if juntos >= total then
+        BossFarm.esperaTimeDesde = nil
+        BossFarm.mostrarTimerNome("")
+        BossFarm.estado = "TIME REUNIDO! AVANCANDO"
+        BossFarm.logEvento("Time reunido (" .. juntos .. "/" .. total .. "). Indo para a rotacao.")
+        return true
+    end
+    if passou >= minutos * 60 then
+        BossFarm.esperaTimeDesde = nil
+        BossFarm.mostrarTimerNome("")
+        BossFarm.estado = "TIME INCOMPLETO! INDO SOZINHO"
+        BossFarm.logEvento("Time incompleto (" .. juntos .. "/" .. total .. ") apos " .. minutos .. " min. Fazendo a rotacao sem eles.")
+        return true
+    end
+
+    local falta = minutos * 60 - passou
+    BossFarm.estado = string.format("AGUARDANDO TIME (%d/%d) %02d:%02d", juntos, total, math.floor(falta / 60), falta % 60)
+    BossFarm.mostrarTimerNome(string.format("PARTY %02d:%02d (%d/%d)", math.floor(falta / 60), falta % 60, juntos, total))
+    delay(1000)
+    return "retry"
+end
+
 function BossFarm.aguardarMinuto27()
-    if storage.BossFarmModeCount == "1X" then return true end
+    if storage.BossFarmModeCount == "1X" then return BossFarm.aguardarTime() end
 
     local min = tonumber(os.date("%M"))
     local sec = tonumber(os.date("%S"))
@@ -329,6 +1007,128 @@ function BossFarm.aguardarMinuto27()
     return "retry"
 end
 
+-- Bank reader embedded in BossFarm. Reuses the client's Bank session and receiver.
+-- It neither registers opcode 236 again nor performs financial operations.
+function BossFarm.contarHarvestableBank()
+    local native = modules and modules.game_bank
+    local protocol = g_game.getProtocolGame()
+    if not native or not protocol or not g_game.isOnline() then return nil end
+
+    local bridge = native.bossFarmBalanceReader
+    if not bridge then
+        bridge = {serial = 0}
+        native.bossFarmBalanceReader = bridge
+
+        local function validDecimal(value)
+            return type(value) == "string" and #value <= 20 and value:match("^%d+$") ~= nil
+        end
+        local function clean(value)
+            value = value:gsub("^0+", "")
+            return value == "" and "0" or value
+        end
+        local function older(a, b)
+            a, b = clean(a), clean(b)
+            if #a ~= #b then return #a < #b end
+            return a < b
+        end
+        local function add(a, b)
+            local out, carry = {}, 0
+            for i = 1, math.max(#a, #b) do
+                local n = (tonumber(a:sub(-i, -i)) or 0) + (tonumber(b:sub(-i, -i)) or 0) + carry
+                table.insert(out, 1, tostring(n % 10))
+                carry = math.floor(n / 10)
+            end
+            if carry > 0 then table.insert(out, 1, tostring(carry)) end
+            return clean(table.concat(out))
+        end
+
+        function bridge.receive(p, opcode, buffer)
+            if p ~= bridge.protocol or opcode ~= 236 or type(buffer) ~= "string" or #buffer > 12000 then return end
+            local ok, packet = pcall(json.decode, buffer)
+            if not ok or type(packet) ~= "table" or packet.v ~= 1 then return end
+            if packet.a == "error" then
+                if packet.code == "session" and packet.rid == bridge.requestId then
+                    bridge.session, bridge.total, bridge.updated = nil, nil, nil
+                    bridge.requestId = nil
+                end
+                return
+            end
+            if packet.a ~= "hello" and packet.a ~= "state" and packet.a ~= "operation" and packet.a ~= "status" then return end
+            local session = packet.session
+            if type(session) ~= "string" or #session > 48 or not session:match("^[%w_-]+$") then return end
+            if packet.a == "hello" then
+                if bridge.session ~= session then bridge.total, bridge.revision, bridge.updated = nil, nil, nil end
+                bridge.session = session
+            elseif bridge.session and session ~= bridge.session then
+                return
+            end
+            local state = packet.state
+            if type(state) == "table" and state.ready == false then
+                bridge.total, bridge.updated, bridge.revision = nil, nil, nil
+                return
+            end
+            if type(state) ~= "table" or state.ready ~= true or state.crystalCid ~= 13201
+                or not validDecimal(state.crystal) or not validDecimal(state.cashCrystal)
+                or not validDecimal(state.revision) then return end
+            if bridge.revision and older(state.revision, bridge.revision) then return end
+            bridge.session = session
+            local nuggets = add(state.crystal, state.cashCrystal)
+            local crystals = #nuggets > 2 and nuggets:sub(1, -3) or "0"
+            bridge.total = tonumber(crystals)
+            bridge.revision, bridge.updated = state.revision, os.time()
+            if packet.rid == bridge.requestId then bridge.requestId = nil end
+        end
+
+        function bridge.bind(p)
+            if bridge.protocol == p then return true end
+            local core = modules and modules.corelib
+            local connector = connect or native.connect or (core and core.connect)
+            local disconnector = disconnect or native.disconnect or (core and core.disconnect)
+            if type(connector) ~= "function" then return false end
+            if bridge.protocol and bridge.listener and type(disconnector) == "function" then
+                pcall(disconnector, bridge.protocol, {onExtendedOpcode = bridge.listener})
+            end
+            bridge.protocol = p
+            bridge.session, bridge.total, bridge.updated, bridge.revision = nil, nil, nil, nil
+            bridge.lastRead, bridge.requestId = nil, nil
+            bridge.listener = function(receiver, opcode, buffer)
+                pcall(bridge.receive, receiver, opcode, buffer)
+            end
+            local ok = pcall(connector, p, {onExtendedOpcode = bridge.listener})
+            if not ok then bridge.protocol = nil end
+            return ok
+        end
+
+        function bridge.read()
+            local now = os.time()
+            if not bridge.lastRead or now < bridge.lastRead or now - bridge.lastRead >= 5 then
+                bridge.lastRead = now
+                if bridge.session then
+                    bridge.serial = bridge.serial + 1
+                    bridge.requestId = "BF_" .. tostring(now) .. "_" .. tostring(bridge.serial)
+                    local payload = {v = 1, a = "state", session = bridge.session, rid = bridge.requestId}
+                    pcall(function() bridge.protocol:sendExtendedOpcode(236, json.encode(payload)) end)
+                elseif type(native.show) == "function" and type(native.hide) == "function" then
+                    -- Bootstrap through the native module so its private session stays valid.
+                    -- Restore the previous visibility immediately, before the next render frame.
+                    local root = g_ui.getRootWidget()
+                    local window = root and root:getChildById("bankWindow")
+                    local visible = window and window:isVisible()
+                    pcall(native.show)
+                    if not visible then pcall(native.hide) end
+                end
+            end
+            if bridge.session and bridge.updated and now >= bridge.updated and now - bridge.updated <= 10 then
+                return bridge.total
+            end
+            return nil
+        end
+    end
+
+    if not bridge.bind(protocol) then return nil end
+    return bridge.read()
+end
+
 function BossFarm.countItem(id)
     local count = 0
     for _, container in pairs(getContainers()) do
@@ -337,6 +1137,16 @@ function BossFarm.countItem(id)
                 count = count + item:getCount()
             end
         end
+    end
+    if id == 13201 then
+        local ok, total = pcall(BossFarm.contarHarvestableBank)
+        if ok and type(total) == "number" and total >= 0 then
+            -- O servidor ja soma mochila + banco. Nao somar a mochila duas vezes.
+            return math.max(count, total)
+        end
+        -- Mochila suficiente continua funcionando mesmo enquanto o Bank consulta.
+        local precisa = BossFarm.harvNecessario and BossFarm.harvNecessario() or 150
+        if count < precisa then return nil end
     end
     return count
 end
@@ -611,6 +1421,7 @@ function BossFarm.iniciarNovaRotacao()
     BossFarm.NPC.ativo = false
     BossFarm.NPC.concluido = false
     BossFarm.NPC.etapa = 0
+    BossFarm.NPC.tentativa = 0
     BossFarm.logEvento("Nova cacada iniciada! Memoria da Rotacao resetada.")
     return true
 end
@@ -639,6 +1450,8 @@ function BossFarm.salvarHorarios(h1, h2, h3, labelDestino, labelPosNpc)
         end
     end
 
+    local antigos = storage.BossFarmHorario.horariosConfigurados or {}
+    local horarioAntigo = {antigos[1], antigos[2], antigos[3]}
     storage.BossFarmHorario.horariosConfigurados = {h1, h2, h3}
 
     for i = 1, 3 do
@@ -654,6 +1467,16 @@ function BossFarm.salvarHorarios(h1, h2, h3, labelDestino, labelPosNpc)
     storage.BossFarmHorario.labelConfigurado = label
     storage.BossFarmHorario.labelPosNpc = labelPos
     local cfg = storage.BossFarmHorario
+    local idx = cfg.indiceRotacaoAtual
+    if cfg.rotacaoEmAndamento and idx and cfg.horariosConfigurados[idx] ~= horarioAntigo[idx] then
+        cfg.rotacaoEmAndamento = false
+        cfg.horaRotacaoAtual = nil
+        cfg.indiceRotacaoAtual = nil
+        if cfg.horariosUsados then cfg.horariosUsados[idx] = false end
+        if cfg.usadoEm then cfg.usadoEm["s" .. idx] = nil end
+        BossFarm.passeAte = 0
+        BossFarm.logEvento("Horario da Rotacao " .. idx .. " mudou: rotacao em andamento cancelada e passe apagado.")
+    end
     if not cfg.rotacaoEmAndamento then
         cfg.salvoEm = os.time()
         for i = 1, 3 do
@@ -743,6 +1566,18 @@ function BossFarm.verificarHorario()
     BossFarm.inicializarHorario()
     local cfg = storage.BossFarmHorario
     if not BossFarm.ativo or BossFarm.ativo.isOff() then return true end
+    if cfg.rotacaoEmAndamento and storage.BossFarmExecutionMode == "LOOP" then
+        cfg.rotacaoEmAndamento = false
+        cfg.horaRotacaoAtual = nil
+        cfg.indiceRotacaoAtual = nil
+        cfg.janelasPerdidas = cfg.janelasPerdidas or {false, false, false}
+        cfg.janelasPerdidas[1] = true
+        BossFarm.marcarSlot(1)
+        BossFarm.passeAte = 0
+        BossFarm.estado = "ROTACAO 1 PERDIDA (" .. (cfg.rotacoesFeitas or 0) .. "/3)"
+        BossFarm.logEvento("Checkin: voltou para a hunt sem terminar o loop (morte/queda). Rotacao 1 PERDIDA, nao puxa mais hoje.")
+        return true
+    end
     if cfg.rotacaoEmAndamento then
         local velha = not cfg.inicioRotacaoTs
             or (cfg.dataRotacao and cfg.dataRotacao ~= BossFarm.dataDoDia())
@@ -833,7 +1668,12 @@ function BossFarm.verificarHorario()
             end
 
             local hwCount = BossFarm.countItem(13201)
-            if hwCount < qtdNecessaria and not BossFarm.modoGratis() then
+            if hwCount == nil and not BossFarm.modoGratis() then
+                BossFarm.estado = "AGUARDANDO SALDO DO BANK"
+                delay(1000)
+                return true
+            end
+            if hwCount ~= nil and hwCount < qtdNecessaria and not BossFarm.modoGratis() then
                 BossFarm.estado = "FALTA HARVESTABLE! (" .. hwCount .. "/" .. qtdNecessaria .. ")"
                 if os.time() - (BossFarm.lastHwWarn or 0) >= 3 then
                     BossFarm.logEvento("ERRO: Rotacao travada! Faltam Harvestables (" .. hwCount .. "/" .. qtdNecessaria .. ")")
@@ -893,6 +1733,11 @@ function BossFarm.verificarHorario()
                         end
 
                         local hwCount = BossFarm.countItem(13201)
+                        if hwCount == nil then
+                            BossFarm.estado = "AGUARDANDO SALDO DO BANK"
+                            delay(1000)
+                            return true
+                        end
                         if hwCount < qtdNecessaria then
                             BossFarm.estado = "FALTA HARVESTABLE! (" .. hwCount .. "/" .. qtdNecessaria .. ")"
                             if os.time() - (BossFarm.lastHwWarn or 0) >= 3 then
@@ -995,7 +1840,7 @@ function BossFarm.textoAcimaDoNome()
     end
     if not BossFarm.modoGratis() then
         local tem, precisa = BossFarm.countItem(13201), BossFarm.harvNecessario()
-        if tem < precisa then
+        if tem ~= nil and tem < precisa then
             table.insert(avisos, "FALTA HARVESTABLE " .. tem .. "/" .. precisa)
         end
     end
@@ -1006,12 +1851,29 @@ function BossFarm.mostrarAcimaDoNome(texto)
     pcall(function() player:setText(texto, "#FF4040") end)
 end
 
-macro(1000, function()
+function BossFarm.limparAvisoNome()
+    local ok, visivel = pcall(function() return player:getText() end)
+    if ok and type(visivel) == "string" then
+        local nosso = (BossFarm.textoNome ~= "" and visivel == BossFarm.textoNome)
+            or visivel:find("FALTA HARVESTABLE", 1, true)
+            or visivel:find("SEM VIP", 1, true)
+            or visivel:match("VIP %d+ DIAS %(PRECISA 10%)")
+        if nosso then BossFarm.mostrarAcimaDoNome("") end
+    elseif BossFarm.textoNome ~= "" then
+        BossFarm.mostrarAcimaDoNome("")
+    end
+end
+
+function BossFarm.atualizarAvisoNome()
     local ok, texto = pcall(BossFarm.textoAcimaDoNome)
     if not ok then texto = "" end
-    if texto == "" and BossFarm.textoNome ~= "" then BossFarm.mostrarAcimaDoNome("") end
+    if texto == "" then BossFarm.limparAvisoNome() end
     BossFarm.textoNome = texto
-end)
+end
+
+-- O texto do Creature persiste entre recargas, mesmo quando textoNome foi zerado.
+BossFarm.limparAvisoNome()
+macro(1000, BossFarm.atualizarAvisoNome)
 
 macro(100, function()
     if BossFarm.textoNome ~= "" then BossFarm.mostrarAcimaDoNome(BossFarm.textoNome) end
@@ -1175,9 +2037,12 @@ function BossFarm.logEvento(texto)
     print("[Boss Farm] " .. texto)
 end
 
+if BossFarm.modoSeparado() then BossFarm.instalarCaveBoss() end
+
 function BossFarm.setCurrent(boss)
     if BossFarm.currentBoss ~= boss then
         BossFarm.currentBoss = boss
+        BossFarm.voltasPorta = 0
         BossFarm.entrou = false
         BossFarm.derrotou = false
         BossFarm.teleportado = false
@@ -1390,11 +2255,28 @@ function BossFarm.waitBossDead(boss)
         BossFarm.entrou = true
     end
 
+    if not BossFarm.entrou and BossFarm.noLobby(player:getPosition()) then
+        BossFarm.voltasPorta = (BossFarm.voltasPorta or 0) + 1
+        if BossFarm.voltasPorta <= 3 then
+            BossFarm.estado = "NAO ENTROU - VOLTANDO NA PORTA " .. BossFarm.voltasPorta .. "/3"
+            BossFarm.logEvento("Checkin: Boss " .. boss .. " ainda no lobby dos TPs, nao entrou. Voltando na porta (" .. BossFarm.voltasPorta .. "/3).")
+            BossFarm.esperandoEntrada = false
+            BossFarm.irPara(BossFarm.label[boss])
+            return "retry"
+        end
+        BossFarm.logEvento("Checkin: Boss " .. boss .. " nao entrou em 3 voltas na porta. Pulando como na porta ocupada.")
+        BossFarm.esperandoEntrada = false
+        BossFarm.tentativaEntrada = 3
+        BossFarm.voltasPorta = 0
+        return BossFarm.tentarEntrada(boss, nil)
+    end
+
     if not BossFarm.entrou then
         BossFarm.estado = "AGUARDANDO ENTRADA"
         delay(500)
         return "retry"
     end
+    BossFarm.voltasPorta = 0
 
     if not BossFarm.derrotou then
         BossFarm.estado = "AGUARDANDO DERROTA"
@@ -1443,6 +2325,7 @@ function BossFarm.resetGeral()
     BossFarm.jaDerrotadoDetectado = false
     BossFarm.lastLabel = nil
     BossFarm.dentroDaSala = nil
+    BossFarm.passeAte = 0
     storage.BossAntiTrapTPEnabled = false
     BossFarm.estado = "AGUARDANDO"
     BossFarm.ultimoEvento = "-"
@@ -1547,6 +2430,7 @@ function BossFarm.iniciarAutoNPC()
     BossFarm.NPC.concluido = false
     BossFarm.NPC.queue = {}
     BossFarm.NPC.timer = os.time()
+    BossFarm.NPC.respondeu = false
 
     for i = 1, 15 do
         if storage.BossFarmNPCList[i] then
@@ -1566,8 +2450,38 @@ function BossFarm.acharNpc()
     return nil
 end
 
+onTalk(function(name, level, mode, text)
+    if BossFarm.NPC.ativo and tostring(name or ""):lower() == BossFarm.NPC_NOME:lower() then
+        BossFarm.NPC.respondeu = true
+    end
+end)
+
+function BossFarm.falhaNpc(motivo)
+    BossFarm.NPC.ativo = false
+    BossFarm.NPC.concluido = false
+    BossFarm.NPC.etapa = 0
+    if g_game.getFollowingCreature() then g_game.cancelFollow() end
+    BossFarm.NPC.tentativa = (BossFarm.NPC.tentativa or 0) + 1
+    if BossFarm.NPC.tentativa < 3 then
+        BossFarm.estado = "NPC - TENTATIVA " .. (BossFarm.NPC.tentativa + 1) .. "/3"
+        BossFarm.logEvento("NPC: " .. motivo .. " Voltando na label npc (tentativa " .. (BossFarm.NPC.tentativa + 1) .. "/3).")
+        BossFarm.irPara("npc")
+        return
+    end
+    BossFarm.NPC.tentativa = 0
+    local cfg = storage.BossFarmHorario
+    cfg.rotacaoEmAndamento = false
+    cfg.horaRotacaoAtual = nil
+    cfg.indiceRotacaoAtual = nil
+    local labelSaida = cfg.labelPosNpc or "saida cave"
+    BossFarm.estado = "NPC FALHOU - VOLTA NAO CONTADA"
+    BossFarm.logEvento("NPC: " .. motivo .. " 3 tentativas sem falar com a " .. BossFarm.NPC_NOME .. ". Volta NAO contada. Indo para: " .. labelSaida)
+    BossFarm.irPara(labelSaida)
+end
+
 function BossFarm.processarNPC()
     if BossFarm.NPC.concluido then return end
+    local loop = BossFarm.NPC.modo == "AUTO" and storage.BossFarmExecutionMode == "LOOP"
 
     if BossFarm.NPC.etapa == 0 then
         local npc = BossFarm.acharNpc()
@@ -1583,6 +2497,9 @@ function BossFarm.processarNPC()
         elseif esperando < 5 then
             BossFarm.estado = "NPC - PROCURANDO " .. BossFarm.NPC_NOME:upper()
             return
+        elseif loop then
+            BossFarm.falhaNpc(BossFarm.NPC_NOME .. " nao encontrada na tela.")
+            return
         else
             BossFarm.logEvento("NPC: " .. BossFarm.NPC_NOME .. " nao apareceu na tela. Falando hi assim mesmo.")
         end
@@ -1595,6 +2512,14 @@ function BossFarm.processarNPC()
     end
 
     if BossFarm.NPC.etapa == 1 then
+        if loop and not BossFarm.NPC.respondeu then
+            if os.time() - BossFarm.NPC.timer < 5 then
+                BossFarm.estado = "NPC - ESPERANDO RESPOSTA"
+            else
+                BossFarm.falhaNpc(BossFarm.NPC_NOME .. " nao respondeu o hi.")
+            end
+            return
+        end
         if os.time() - BossFarm.NPC.timer >= 1 then
             if #BossFarm.NPC.queue > 0 then
                 local bossId = BossFarm.NPC.queue[1]
@@ -1604,6 +2529,14 @@ function BossFarm.processarNPC()
                 BossFarm.NPC.etapa = 2
                 BossFarm.NPC.timer = os.time()
             else
+                local loopHarvestableCount
+                if loop and (storage.BossFarmHorario.rotacoesFeitas or 0) < 2 then
+                    loopHarvestableCount = BossFarm.countItem(13201)
+                    if loopHarvestableCount == nil then
+                        BossFarm.estado = "AGUARDANDO SALDO DO BANK"
+                        return
+                    end
+                end
                 BossFarm.NPC.ativo = false
                 BossFarm.NPC.concluido = true
                 BossFarm.estado = "LIMPEZA CONCLUIDA"
@@ -1611,6 +2544,7 @@ function BossFarm.processarNPC()
 
                 if BossFarm.NPC.modo == "AUTO" then
 
+                    BossFarm.NPC.tentativa = 0
                     if BossFarm.finalizarRotacao then BossFarm.finalizarRotacao() end
 
                     local cfg = storage.BossFarmHorario
@@ -1624,7 +2558,7 @@ function BossFarm.processarNPC()
                             qtdNecessaria = countAtivos * 10
                         end
 
-                        if BossFarm.countItem(13201) < qtdNecessaria then
+                        if loopHarvestableCount < qtdNecessaria then
                             local labelSaida = cfg.labelPosNpc or "saida cave"
                             BossFarm.logEvento("Loop Abortado! Sem Harvestables. Indo pra saida: " .. labelSaida)
                             BossFarm.irPara(labelSaida)
@@ -1840,7 +2774,7 @@ BossCheckBox < CheckBox
 
 AutoPartyListWindow < MainWindow
   text: Auto Party Setup
-  size: 200 250
+  size: 200 280
   @onEscape: self:hide()
   Label
     id: lblLeader
@@ -1894,6 +2828,20 @@ AutoPartyListWindow < MainWindow
     anchors.left: prev.right
     anchors.top: prev.top
     anchors.bottom: prev.bottom
+    margin-left: 3
+  Label
+    id: lblEspera
+    anchors.left: parent.left
+    anchors.top: playerName.bottom
+    margin-top: 9
+    width: 130
+    text: Esperar time 1X (min):
+  TextEdit
+    id: txtEspera
+    anchors.left: prev.right
+    anchors.right: parent.right
+    anchors.top: playerName.bottom
+    margin-top: 5
     margin-left: 3
   Button
     id: closeButton
@@ -2177,7 +3125,7 @@ BossFarmWindow < UIWindow
 
   Panel
     id: pageConfig
-    height: 350
+    height: 370
     visible: false
     layout:
       type: verticalBox
@@ -2352,6 +3300,32 @@ BossFarmWindow < UIWindow
       BotTextEdit
         id: labelPosNpc
         width: 168
+        height: 18
+        text-align: center
+
+    Panel
+      id: modoCaveRow
+      height: 20
+      layout:
+        type: horizontalBox
+        spacing: 0
+      UILabel
+        text: CaveBot:
+        color: #CCCCCC
+        width: 55
+      BossFarmBtn
+        id: toggleModoCave
+        text: UNICO
+        width: 100
+        height: 18
+      UILabel
+        text: Delay(s):
+        color: #CCCCCC
+        width: 55
+        text-align: center
+      BotTextEdit
+        id: delayEntrada
+        width: 48
         height: 18
         text-align: center
 
@@ -2581,6 +3555,11 @@ if autoPartyListWindow == nil then
         config.leaderName = BossFarm.normalizarNomePlayer(text)
     end
     autoPartyListWindow.txtLeader:setText(config.leaderName)
+
+    autoPartyListWindow.txtEspera:setText(tostring(config.esperaTime or 0))
+    autoPartyListWindow.txtEspera.onTextChange = function(widget, text)
+        config.esperaTime = math.max(0, math.min(30, math.floor(tonumber(text) or 0)))
+    end
 end
 
 bossFarmWindow = g_ui.createWidget("BossFarmWindow", g_ui.getRootWidget())
@@ -2632,6 +3611,9 @@ bossFarmWindow.hour2 = bossFarmWindow:recursiveGetChildById("hour2")
 bossFarmWindow.hour3 = bossFarmWindow:recursiveGetChildById("hour3")
 bossFarmWindow.labelDestino = bossFarmWindow:recursiveGetChildById("labelDestino")
 bossFarmWindow.labelPosNpc = bossFarmWindow:recursiveGetChildById("labelPosNpc")
+bossFarmWindow.toggleModoCave = bossFarmWindow:recursiveGetChildById("toggleModoCave")
+bossFarmWindow.delayEntrada = bossFarmWindow:recursiveGetChildById("delayEntrada")
+if bossFarmWindow.delayEntrada then bossFarmWindow.delayEntrada:setText(tostring(storage.BossFarmDelayEntrada)) end
 bossFarmWindow.rotationStatus1 = bossFarmWindow:recursiveGetChildById("rotationStatus1")
 bossFarmWindow.rotationStatus2 = bossFarmWindow:recursiveGetChildById("rotationStatus2")
 bossFarmWindow.rotationStatus3 = bossFarmWindow:recursiveGetChildById("rotationStatus3")
@@ -2855,6 +3837,25 @@ if bossFarmWindow.toggleChase then
     bossFarmWindow.toggleChase.onClick = function()
         storage.BossAutoFollowEnabled = not storage.BossAutoFollowEnabled
         BossFarm.atualizarPainel()
+    end
+end
+
+if bossFarmWindow.toggleModoCave then
+    bossFarmWindow.toggleModoCave.onClick = function()
+        storage.BossFarmModoCave = BossFarm.modoSeparado() and "UNICO" or "SEPARADO"
+        if BossFarm.modoSeparado() then BossFarm.instalarCaveBoss() end
+        BossFarm.logEvento("Modo CaveBot: " .. storage.BossFarmModoCave .. (BossFarm.modoSeparado() and (" (rotacao no CaveBot '" .. BossFarm.CAVE_BOSS .. "')") or ""))
+        BossFarm.gravarArquivo()
+        BossFarm.atualizarPainel()
+    end
+end
+
+if bossFarmWindow.delayEntrada then
+    bossFarmWindow.delayEntrada.onTextChange = function(widget, texto)
+        local seg = tonumber((tostring(texto or ""):gsub(",", ".")))
+        if not seg or seg < 0 or seg > 30 then return end
+        storage.BossFarmDelayEntrada = seg
+        BossFarm.gravarArquivo()
     end
 end
 
@@ -3083,7 +4084,7 @@ function BossFarm.atualizarPainel()
         end
 
         local hw = BossFarm.cachedHarvestableCount
-        bossFarmWindow.harvestableCount:setText(tostring(hw))
+        bossFarmWindow.harvestableCount:setText(hw == nil and "..." or tostring(hw))
 
         local qtdNecessaria = 150
         if storage.BossFarmRotationType == "9BOSS" then
@@ -3096,7 +4097,9 @@ function BossFarm.atualizarPainel()
             qtdNecessaria = countAtivos * 10
         end
 
-        if hw < qtdNecessaria then
+        if hw == nil then
+            bossFarmWindow.harvestableCount:setColor("#FFFF00")
+        elseif hw < qtdNecessaria then
             bossFarmWindow.harvestableCount:setColor("#FF3333")
         else
             bossFarmWindow.harvestableCount:setColor("#00FA9A")
@@ -3177,6 +4180,16 @@ function BossFarm.atualizarPainel()
         end
     end
 
+    if bossFarmWindow.toggleModoCave then
+        if BossFarm.modoSeparado() then
+            bossFarmWindow.toggleModoCave:setText("SEPARADO")
+            bossFarmWindow.toggleModoCave:setColor("#00FA9A")
+        else
+            bossFarmWindow.toggleModoCave:setText("UNICO")
+            bossFarmWindow.toggleModoCave:setColor("#FFFF00")
+        end
+    end
+
     if bossFarmWindow.toggleAvisoNome then
         if storage.BossFarmAvisoNome then
             bossFarmWindow.toggleAvisoNome:setText("ATIVO")
@@ -3219,6 +4232,14 @@ function BossFarm.atualizarPainel()
 
     BossFarm.inicializarHorario()
     local cfgHorarios = storage.BossFarmHorario.horariosConfigurados or BossFarm.HorariosPadrao
+
+    local horarioLivre = storage.BossFarmExecutionMode ~= "LOOP"
+    for _, campo in ipairs({bossFarmWindow.hour2, bossFarmWindow.hour3}) do
+        if campo and campo:isEnabled() ~= horarioLivre then
+            campo:setEditable(horarioLivre)
+            campo:setEnabled(horarioLivre)
+        end
+    end
 
     if not BossFarm.painelHorariosCarregados and bossFarmWindow.hour1 then
         bossFarmWindow.hour1:setText(cfgHorarios[1] or "")
@@ -3285,15 +4306,18 @@ function BossFarm.atualizarPainel()
         local loop = storage.BossFarmExecutionMode == "LOOP"
         local feitas = cfg.rotacoesFeitas or 0
 
-        if loop and feitas >= i then
+        if loop and i >= 2 then
+            texto = "DESATIVADA"
+            cor = "#B03060"
+        elseif loop and feitas >= 3 then
             texto = "CONCLUIDA"
             cor = "#00FA9A"
-        elseif loop and cfg.rotacaoEmAndamento and feitas + 1 == i then
-            texto = "EM ROTACAO"
+        elseif loop and cfg.rotacaoEmAndamento then
+            texto = (feitas + 1) .. "/3"
             cor = "#FFFF00"
-        elseif loop and i >= 2 then
-            texto = "PENDENTE"
-            cor = "#AAAAAA"
+        elseif loop and feitas > 0 then
+            texto = feitas .. "/3" .. ((cfg.janelasPerdidas and cfg.janelasPerdidas[1]) and " PERDIDA" or "")
+            cor = "#FF8C00"
         elseif BossFarm.modoHorarioUnico() and i >= 2 then
             texto = "NAO USADA"
             cor = "#555555"
